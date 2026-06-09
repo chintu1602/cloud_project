@@ -19,12 +19,12 @@ resource "azurerm_linux_function_app" "this" {
   site_config {
     always_on = true
     application_stack {
-      python_version = "3.11"
+      node_version = "20"
     }
   }
 
   app_settings = merge(var.app_settings, {
-    FUNCTIONS_WORKER_RUNTIME = "python"
+    FUNCTIONS_WORKER_RUNTIME = "node"
     AzureWebJobsFeatureFlags = "EnableWorkerIndexing"
   })
 

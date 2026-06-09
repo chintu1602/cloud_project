@@ -1,0 +1,12 @@
+{
+    "IsEncrypted": false,
+    "Values": {
+        "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+        "FUNCTIONS_WORKER_RUNTIME": "node",
+        "DATABASE_URL": "",
+        "AZURE_STORAGE_CONNECTION_STRING": "",
+        "AZURE_STORAGE_CONTAINER_NAME": "health-documents",
+        "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT": "",
+        "AZURE_DOCUMENT_INTELLIGENCE_KEY": ""
+    }
+}
