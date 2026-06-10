@@ -26,9 +26,11 @@ resource "azurerm_key_vault_access_policy" "terraform" {
 
 # ── Access Policy: App Services (Managed Identity) ───────────
 # Each App Service gets Get + List on secrets only
+# NOTE: Use a map with static string keys so Terraform can determine
+# resource instance keys at plan time (unknown values only in values, not keys).
 
 resource "azurerm_key_vault_access_policy" "app_services" {
-  for_each = toset(var.app_service_principal_ids)
+  for_each = var.app_service_principal_ids
 
   key_vault_id = azurerm_key_vault.this.id
   tenant_id    = data.azurerm_client_config.current.tenant_id

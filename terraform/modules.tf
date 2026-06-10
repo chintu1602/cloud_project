@@ -206,7 +206,7 @@ module "openai" {
 
 module "service_bus" {
   source              = "./modules/service_bus"
-  name                = "${local.name_prefix}-sb"
+  name                = "${local.name_prefix}-bus"
   resource_group_name = module.resource_group.name
   location            = var.location
   topic_name          = "meal-reminders"
@@ -228,10 +228,12 @@ module "key_vault" {
   tags                = local.common_tags
 
   # Grant both App Service managed identities read access
-  app_service_principal_ids = [
-    module.app_service.principal_id,
-    module.frontend_app_service.principal_id,
-  ]
+  # Keys must be static strings so Terraform can resolve for_each at plan time;
+  # values (principal IDs) are allowed to be apply-time unknowns.
+  app_service_principal_ids = {
+    backend  = module.app_service.principal_id
+    frontend = module.frontend_app_service.principal_id
+  }
 
   secrets = {
     # ── Auth & JWT ───────────────────────────────────────────

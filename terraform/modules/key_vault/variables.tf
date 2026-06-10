@@ -25,7 +25,7 @@ variable "secrets" {
 }
 
 variable "app_service_principal_ids" {
-  type        = list(string)
-  default     = []
-  description = "List of App Service managed identity principal IDs to grant Key Vault read access"
+  type        = map(string)
+  default     = {}
+  description = "Map of logical name to App Service managed identity principal ID, granting Key Vault read access. Use static string keys (e.g. 'backend', 'frontend') so Terraform can resolve for_each at plan time."
 }
