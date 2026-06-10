@@ -11,24 +11,25 @@ resource "azurerm_linux_web_app" "this" {
   site_config {
     always_on                              = true
     ftps_state                             = "Disabled"
-    health_check_path                      = "/health"
+    health_check_path                      = "/"
     container_registry_use_managed_identity = false
 
     application_stack {
-      docker_image_name        = "nutriai-backend:latest"
+      docker_image_name        = "nutriai-frontend:latest"
       docker_registry_url      = "https://${var.acr_login_server}"
       docker_registry_username = var.acr_admin_username
       docker_registry_password = var.acr_admin_password
     }
   }
 
-  app_settings = merge(var.app_settings, {
+  app_settings = {
     WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"
     DOCKER_REGISTRY_SERVER_URL          = "https://${var.acr_login_server}"
     DOCKER_REGISTRY_SERVER_USERNAME     = var.acr_admin_username
     DOCKER_REGISTRY_SERVER_PASSWORD     = var.acr_admin_password
-    WEBSITES_PORT                       = "8000"
-  })
+    WEBSITES_PORT                       = "80"
+    BACKEND_URL                         = var.backend_url
+  }
 
   identity { type = "SystemAssigned" }
 

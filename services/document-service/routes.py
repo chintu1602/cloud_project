@@ -4,8 +4,7 @@ Document Service - API Routes
 
 import logging
 
-import httpx
-from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -21,6 +20,78 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 
 ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+def process_document_ocr(document_id: str, blob_name: str):
+    """
+    Background task: download blob, run OCR, update database.
+    """
+    from database import SessionLocal
+    from azure.ai.formrecognizer import DocumentAnalysisClient
+    from azure.core.credentials import AzureKeyCredential
+
+    db = SessionLocal()
+    try:
+        # Download blob
+        from services import get_blob_service_client
+        blob_service_client = get_blob_service_client()
+        container_client = blob_service_client.get_container_client(settings.AZURE_STORAGE_CONTAINER_NAME)
+        blob_client = container_client.get_blob_client(blob_name)
+        download_stream = blob_client.download_blob()
+        document_content = download_stream.readall()
+        logger.info(f"Downloaded blob {blob_name}: {len(document_content)} bytes")
+
+        # Run OCR
+        client = DocumentAnalysisClient(
+            endpoint=settings.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
+            credential=AzureKeyCredential(settings.AZURE_DOCUMENT_INTELLIGENCE_KEY),
+        )
+        poller = client.begin_analyze_document(model_id="prebuilt-read", document=document_content)
+        result = poller.result()
+
+        extracted_text = ""
+        for page in result.pages:
+            for line in page.lines:
+                extracted_text += line.content + "\n"
+            extracted_text += "\n"
+
+        if result.tables:
+            extracted_text += "\n--- Tables ---\n"
+            for table_idx, table in enumerate(result.tables):
+                extracted_text += f"\nTable {table_idx + 1}:\n"
+                current_row = -1
+                row_data = []
+                for cell in table.cells:
+                    if cell.row_index != current_row:
+                        if row_data:
+                            extracted_text += " | ".join(row_data) + "\n"
+                        row_data = []
+                        current_row = cell.row_index
+                    row_data.append(cell.content)
+                if row_data:
+                    extracted_text += " | ".join(row_data) + "\n"
+
+        extracted_text = extracted_text.strip()
+        logger.info(f"OCR completed for {document_id}: {len(extracted_text)} characters extracted")
+
+        # Update document record
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if document:
+            document.ocr_content = extracted_text
+            document.ocr_status = "completed"
+            db.commit()
+
+    except Exception as e:
+        logger.error(f"Error processing document {document_id}: {e}")
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if document:
+                document.ocr_status = "failed"
+                db.commit()
+        except Exception:
+            db.rollback()
+    finally:
+        db.close()
 
 
 @router.get("/list")
@@ -52,6 +123,7 @@ async def list_documents(request: Request, db: Session = Depends(get_db)):
 @router.post("/upload")
 async def upload_doc(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     document_type: str = Form("other"),
     db: Session = Depends(get_db),
@@ -93,22 +165,10 @@ async def upload_doc(
         db.commit()
         db.refresh(document)
 
-        # Trigger Function App for OCR
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"{settings.FUNCTION_APP_URL}/api/process-document",
-                    json={
-                        "document_id": str(document.id),
-                        "blob_name": document.blob_name,
-                    },
-                    headers={"x-functions-key": settings.FUNCTION_APP_KEY},
-                    timeout=10.0,
-                )
-            document.ocr_status = "processing"
-            db.commit()
-        except Exception as e:
-            logger.warning(f"Could not trigger Function App for OCR: {e}")
+        # Run OCR processing in background
+        document.ocr_status = "processing"
+        db.commit()
+        background_tasks.add_task(process_document_ocr, str(document.id), document.blob_name)
 
         return JSONResponse(content={
             "message": "Document uploaded successfully.",

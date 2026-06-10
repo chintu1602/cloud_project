@@ -106,8 +106,8 @@ services:
       - DATABASE_URL=postgresql://nutriai_user:nutriai_password@postgres:5432/nutriai
       - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING:-}
       - AZURE_STORAGE_CONTAINER_NAME=${AZURE_STORAGE_CONTAINER_NAME:-nutriai-documents}
-      - FUNCTION_APP_URL=${FUNCTION_APP_URL:-}
-      - FUNCTION_APP_KEY=${FUNCTION_APP_KEY:-}
+      - AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT=${AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT:-}
+      - AZURE_DOCUMENT_INTELLIGENCE_KEY=${AZURE_DOCUMENT_INTELLIGENCE_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

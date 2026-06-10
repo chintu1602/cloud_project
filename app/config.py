@@ -46,10 +46,6 @@ class Settings(BaseSettings):
     # Application Insights
     APPLICATIONINSIGHTS_CONNECTION_STRING: str = ""
 
-    # Azure Function App
-    FUNCTION_APP_URL: str = "http://localhost:7071"
-    FUNCTION_APP_KEY: str = ""
-
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

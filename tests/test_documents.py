@@ -30,17 +30,13 @@ class TestDocumentUpload:
     """Tests for document upload functionality."""
 
     @patch("app.routers.documents.upload_document")
-    @patch("app.routers.documents.httpx")
-    def test_upload_document_success(self, mock_httpx, mock_upload, authenticated_client, db_session, test_user):
+    @patch("app.routers.documents.process_document_ocr")
+    def test_upload_document_success(self, mock_ocr, mock_upload, authenticated_client, db_session, test_user):
         """Upload should succeed with valid PDF file."""
         mock_upload.return_value = {
             "blob_name": "test-uuid.pdf",
             "blob_url": "https://storage.blob.core.windows.net/test-uuid.pdf",
         }
-        mock_httpx_client = MagicMock()
-        mock_httpx.Client.return_value.__enter__ = MagicMock(return_value=mock_httpx_client)
-        mock_httpx.Client.return_value.__exit__ = MagicMock(return_value=False)
-        mock_httpx_client.post.return_value = MagicMock(status_code=200)
 
         response = authenticated_client.post(
             "/documents/upload",

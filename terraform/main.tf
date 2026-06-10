@@ -1,6 +1,12 @@
 # ============================================================
 # NutriAI Health Portal - Terraform Root Configuration
 # Azure Cloud Infrastructure
+#
+# Workspaces:
+#   terraform workspace new dev
+#   terraform workspace new prod
+#   terraform plan -var-file=environments/dev.tfvars
+#   terraform plan -var-file=environments/prod.tfvars
 # ============================================================
 
 terraform {

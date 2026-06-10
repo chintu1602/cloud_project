@@ -3,8 +3,9 @@ NutriAI Health Portal - Main Application Entry Point
 FastAPI application with Jinja2 templates, static files, and all routers.
 """
 
+import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -60,10 +61,83 @@ app.include_router(admin.router)
 
 @app.on_event("startup")
 async def startup_event():
-    """Create database tables on startup."""
+    """Create database tables on startup and start background tasks."""
     logger.info("Starting NutriAI Health Portal...")
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified.")
+    asyncio.create_task(periodic_document_cleanup())
+    logger.info("Background document cleanup task started.")
+
+
+async def periodic_document_cleanup():
+    """
+    Periodic background task that runs every hour.
+    Marks documents stuck in 'processing' (>30 min) or 'pending' (>1 hour) as 'failed'.
+    Replaces the send_notifications Azure Function timer trigger.
+    """
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Run every hour
+            logger.info("Running periodic document cleanup...")
+
+            from app.database import SessionLocal
+            db = SessionLocal()
+            try:
+                now = datetime.utcnow()
+
+                # Mark documents stuck in 'processing' for >30 minutes
+                thirty_min_ago = now - timedelta(minutes=30)
+                stuck_processing = (
+                    db.query(Document)
+                    .filter(
+                        Document.ocr_status == "processing",
+                        Document.uploaded_at < thirty_min_ago,
+                    )
+                    .all()
+                )
+                for doc in stuck_processing:
+                    logger.warning(
+                        f"Document {doc.id} ({doc.original_filename}) stuck in processing. "
+                        f"Uploaded at {doc.uploaded_at}. Marking as failed."
+                    )
+                    doc.ocr_status = "failed"
+
+                # Mark documents stuck in 'pending' for >1 hour
+                one_hour_ago = now - timedelta(hours=1)
+                stuck_pending = (
+                    db.query(Document)
+                    .filter(
+                        Document.ocr_status == "pending",
+                        Document.uploaded_at < one_hour_ago,
+                    )
+                    .all()
+                )
+                for doc in stuck_pending:
+                    logger.warning(
+                        f"Document {doc.id} ({doc.original_filename}) stuck in pending. "
+                        f"Uploaded at {doc.uploaded_at}. Marking as failed."
+                    )
+                    doc.ocr_status = "failed"
+
+                total_updated = len(stuck_processing) + len(stuck_pending)
+                if total_updated > 0:
+                    db.commit()
+                    logger.info(f"Updated {total_updated} stuck documents to 'failed' status.")
+                else:
+                    logger.info("No stuck documents found.")
+
+            except Exception as e:
+                logger.error(f"Error in periodic document cleanup: {e}")
+                db.rollback()
+            finally:
+                db.close()
+
+        except asyncio.CancelledError:
+            logger.info("Periodic document cleanup task cancelled.")
+            break
+        except Exception as e:
+            logger.error(f"Unexpected error in cleanup loop: {e}")
+            await asyncio.sleep(60)  # Retry after 1 minute on unexpected errors
 
 
 @app.on_event("shutdown")

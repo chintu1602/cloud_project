@@ -6,8 +6,7 @@ Handles document upload, listing, status polling, preview, and deletion.
 import logging
 from typing import Optional
 
-import httpx
-from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -17,7 +16,8 @@ from app.config import get_settings
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.models.document import Document
-from app.services.azure_storage_service import upload_document, get_document_url, delete_document
+from app.services.azure_storage_service import upload_document, get_document_url, delete_document, download_document
+from app.services.document_intelligence_service import analyze_document
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -27,6 +27,46 @@ templates = Jinja2Templates(directory="app/templates")
 
 ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+def process_document_ocr(document_id: str, blob_name: str):
+    """
+    Background task: download blob, run OCR, update database.
+    Uses its own DB session since background tasks run outside the request lifecycle.
+    """
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        # Download blob content
+        document_content = download_document(blob_name)
+        logger.info(f"Downloaded blob {blob_name}: {len(document_content)} bytes")
+
+        # Run OCR
+        extracted_text = analyze_document(document_content)
+        logger.info(f"OCR completed for {document_id}: {len(extracted_text)} characters extracted")
+
+        # Update document record with results
+        from app.models.document import Document
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if document:
+            document.ocr_content = extracted_text
+            document.ocr_status = "completed"
+            db.commit()
+            logger.info(f"Document {document_id} OCR status updated to completed.")
+
+    except Exception as e:
+        logger.error(f"Error processing document {document_id}: {e}")
+        try:
+            from app.models.document import Document
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if document:
+                document.ocr_status = "failed"
+                db.commit()
+        except Exception:
+            db.rollback()
+    finally:
+        db.close()
 
 
 @router.get("", response_class=HTMLResponse)
@@ -52,6 +92,7 @@ async def documents_page(
 @router.post("/upload")
 async def upload_doc(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     document_type: str = Form("other"),
     current_user: User = Depends(get_current_user),
@@ -101,23 +142,10 @@ async def upload_doc(
         db.commit()
         db.refresh(document)
 
-        # Trigger Function App for OCR processing
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"{settings.FUNCTION_APP_URL}/api/process-document",
-                    json={
-                        "document_id": str(document.id),
-                        "blob_name": document.blob_name,
-                    },
-                    headers={"x-functions-key": settings.FUNCTION_APP_KEY},
-                    timeout=10.0,
-                )
-            # Update status to processing
-            document.ocr_status = "processing"
-            db.commit()
-        except Exception as e:
-            logger.warning(f"Could not trigger Function App for OCR: {e}. Document will remain pending.")
+        # Run OCR processing in background
+        document.ocr_status = "processing"
+        db.commit()
+        background_tasks.add_task(process_document_ocr, str(document.id), document.blob_name)
 
         return JSONResponse(
             status_code=200,

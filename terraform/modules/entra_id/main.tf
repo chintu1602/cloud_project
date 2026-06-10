@@ -1,6 +1,3 @@
-variable "display_name" { type = string }
-variable "redirect_uri" { type = string }
-
 data "azuread_client_config" "current" {}
 
 resource "azuread_application" "this" {
@@ -37,7 +34,3 @@ resource "azuread_application_password" "this" {
   display_name   = "nutriai-client-secret"
   end_date       = "2027-12-31T00:00:00Z"
 }
-
-output "client_id" { value = azuread_application.this.client_id }
-output "client_secret" { value = azuread_application_password.this.value; sensitive = true }
-output "tenant_id" { value = data.azuread_client_config.current.tenant_id }

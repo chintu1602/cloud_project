@@ -1,10 +1,3 @@
-variable "name" { type = string }
-variable "resource_group_name" { type = string }
-variable "app_service_id" { type = string }
-variable "appinsights_id" { type = string }
-variable "action_group_email" { type = string }
-variable "tags" { type = map(string) }
-
 resource "azurerm_monitor_action_group" "this" {
   name                = "${var.name}-action-group"
   resource_group_name = var.resource_group_name
@@ -82,5 +75,3 @@ resource "azurerm_monitor_metric_alert" "high_cpu" {
     action_group_id = azurerm_monitor_action_group.this.id
   }
 }
-
-output "action_group_id" { value = azurerm_monitor_action_group.this.id }

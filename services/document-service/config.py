@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER_NAME: str = "health-documents"
 
-    FUNCTION_APP_URL: str = "http://localhost:7071"
-    FUNCTION_APP_KEY: str = ""
+    AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: str = ""
+    AZURE_DOCUMENT_INTELLIGENCE_KEY: str = ""
 
     APPLICATIONINSIGHTS_CONNECTION_STRING: str = ""
 

@@ -6,8 +6,24 @@ output "resource_group_name" {
   value = module.resource_group.name
 }
 
-output "app_url" {
-  value = module.app_service.default_hostname
+output "backend_url" {
+  value       = module.app_service.default_hostname
+  description = "Backend App Service hostname"
+}
+
+output "frontend_url" {
+  value       = module.frontend_app_service.default_hostname
+  description = "Frontend App Service hostname"
+}
+
+output "application_gateway_ip" {
+  value       = module.application_gateway.public_ip
+  description = "Application Gateway public IP"
+}
+
+output "application_gateway_fqdn" {
+  value       = module.application_gateway.public_ip_fqdn
+  description = "Application Gateway FQDN"
 }
 
 output "database_fqdn" {
@@ -30,8 +46,4 @@ output "container_registry_login_server" {
 output "application_insights_connection_string" {
   value     = module.monitoring.appinsights_connection_string
   sensitive = true
-}
-
-output "function_app_url" {
-  value = module.function_app.default_hostname
 }

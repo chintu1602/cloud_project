@@ -4,7 +4,7 @@
 # ============================================================
 
 project_name = "nutriai"
-environment  = "prod"
+environment  = "dev"    # dev or prod
 location     = "eastus"
 
 admin_email = "admin@example.com"
@@ -17,15 +17,24 @@ entra_tenant_id     = ""
 # OpenAI
 openai_model_deployment = "gpt-4"
 
+# Azure Document Intelligence (OCR)
+document_intelligence_endpoint = ""
+document_intelligence_key      = ""
+
 # Email (SMTP)
 smtp_host     = "smtp.gmail.com"
 smtp_port     = 587
 smtp_username = ""
 smtp_password = ""
 
-# SKUs
+# SKUs (override per environment in environments/*.tfvars)
 app_service_sku = "B2"
 postgres_sku    = "B_Standard_B1ms"
+
+# Application Gateway
+appgw_sku_name = "Standard_v2"
+appgw_sku_tier = "Standard_v2"
+appgw_capacity = 2
 
 tags = {
   Project     = "NutriAI"
