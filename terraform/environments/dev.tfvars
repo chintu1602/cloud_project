@@ -8,7 +8,6 @@ app_service_sku = "B1"
 postgres_sku    = "B_Standard_B1ms"
 appgw_capacity  = 1
 
-admin_email = "dev-admin@nutriai-health.com"
 
 tags = {
   Project     = "NutriAI"

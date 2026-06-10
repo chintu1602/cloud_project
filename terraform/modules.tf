@@ -7,6 +7,31 @@ locals {
   common_tags = merge(var.tags, {
     Environment = var.environment
   })
+
+  # Key Vault reference helper — produces the App Service KV reference syntax
+  kv_name = "${var.project_name}${var.environment}kv"
+  kv_ref  = "kv_ref"
+}
+
+# Shorthand function for Key Vault references
+# App Service reads secret at runtime via Managed Identity — never stored in plain text
+locals {
+  kv = {
+    jwt_secret_key                 = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=jwt-secret-key)"
+    db_password                    = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=db-password)"
+    database_url                   = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=database-url)"
+    storage_connection_string      = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=storage-connection-string)"
+    openai_endpoint                = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=openai-endpoint)"
+    openai_key                     = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=openai-key)"
+    doc_intelligence_endpoint      = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=doc-intelligence-endpoint)"
+    doc_intelligence_key           = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=doc-intelligence-key)"
+    service_bus_connection_string  = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=service-bus-connection-string)"
+    entra_client_id                = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=entra-client-id)"
+    entra_client_secret            = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=entra-client-secret)"
+    entra_tenant_id                = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=entra-tenant-id)"
+    smtp_username                  = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=smtp-username)"
+    smtp_password                  = "@Microsoft.KeyVault(VaultName=${local.kv_name};SecretName=smtp-password)"
+  }
 }
 
 # ────────────────────────────────────────────────────────────
@@ -33,54 +58,7 @@ module "vnet" {
 }
 
 # ────────────────────────────────────────────────────────────
-# 3. Key Vault
-# ────────────────────────────────────────────────────────────
-
-module "key_vault" {
-  source              = "./modules/key_vault"
-  name                = "${var.project_name}${var.environment}kv"
-  resource_group_name = module.resource_group.name
-  location            = var.location
-  tags                = local.common_tags
-  secrets = {
-    "jwt-secret-key"      = random_password.jwt_secret.result
-    "db-password"         = random_password.db_password.result
-    "entra-client-secret" = var.entra_client_secret
-    "smtp-password"       = var.smtp_password
-  }
-}
-
-# ────────────────────────────────────────────────────────────
-# 4. PostgreSQL Flexible Server
-# ────────────────────────────────────────────────────────────
-
-module "postgresql" {
-  source              = "./modules/postgresql"
-  name                = "${local.name_prefix}-pgdb"
-  resource_group_name = module.resource_group.name
-  location            = var.location
-  sku_name            = var.postgres_sku
-  admin_password      = random_password.db_password.result
-  delegated_subnet_id = module.vnet.db_subnet_id
-  private_dns_zone_id = module.vnet.postgres_dns_zone_id
-  tags                = local.common_tags
-}
-
-# ────────────────────────────────────────────────────────────
-# 5. Storage Account (Blob)
-# ────────────────────────────────────────────────────────────
-
-module "storage" {
-  source              = "./modules/storage"
-  name                = "${var.project_name}${var.environment}sa"
-  resource_group_name = module.resource_group.name
-  location            = var.location
-  container_name      = "nutriai-documents"
-  tags                = local.common_tags
-}
-
-# ────────────────────────────────────────────────────────────
-# 6. Container Registry
+# 3. Container Registry
 # ────────────────────────────────────────────────────────────
 
 module "container_registry" {
@@ -92,7 +70,7 @@ module "container_registry" {
 }
 
 # ────────────────────────────────────────────────────────────
-# 7. App Service Plan (shared by frontend + backend)
+# 4. App Service Plan (shared by frontend + backend)
 # ────────────────────────────────────────────────────────────
 
 module "app_service_plan" {
@@ -105,7 +83,8 @@ module "app_service_plan" {
 }
 
 # ────────────────────────────────────────────────────────────
-# 8. Backend App Service
+# 5. Backend App Service
+# NOTE: app_settings use Key Vault references — no plain text secrets
 # ────────────────────────────────────────────────────────────
 
 module "app_service" {
@@ -120,31 +99,31 @@ module "app_service" {
   vnet_integration_subnet_id = module.vnet.backend_subnet_id
   tags                       = local.common_tags
   app_settings = {
-    DATABASE_URL                          = module.postgresql.connection_string
-    JWT_SECRET_KEY                        = random_password.jwt_secret.result
-    AZURE_STORAGE_CONNECTION_STRING       = module.storage.connection_string
+    # ── All secrets resolved from Key Vault at runtime ──────
+    DATABASE_URL                          = local.kv.database_url
+    JWT_SECRET_KEY                        = local.kv.jwt_secret_key
+    AZURE_STORAGE_CONNECTION_STRING       = local.kv.storage_connection_string
     AZURE_STORAGE_CONTAINER_NAME          = "nutriai-documents"
-    AZURE_OPENAI_ENDPOINT                 = module.openai.endpoint
-    AZURE_OPENAI_KEY                      = module.openai.key
+    AZURE_OPENAI_ENDPOINT                 = local.kv.openai_endpoint
+    AZURE_OPENAI_KEY                      = local.kv.openai_key
     AZURE_OPENAI_DEPLOYMENT_NAME          = var.openai_model_deployment
-    AZURE_SERVICE_BUS_CONNECTION_STRING    = module.service_bus.connection_string
+    AZURE_SERVICE_BUS_CONNECTION_STRING   = local.kv.service_bus_connection_string
     AZURE_SERVICE_BUS_TOPIC_NAME          = "meal-reminders"
-    AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT  = var.document_intelligence_endpoint
-    AZURE_DOCUMENT_INTELLIGENCE_KEY       = var.document_intelligence_key
-    ENTRA_CLIENT_ID                       = var.entra_client_id
-    ENTRA_CLIENT_SECRET                   = var.entra_client_secret
-    ENTRA_TENANT_ID                       = var.entra_tenant_id
-    APPLICATIONINSIGHTS_CONNECTION_STRING = module.monitoring.appinsights_connection_string
+    AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT  = local.kv.doc_intelligence_endpoint
+    AZURE_DOCUMENT_INTELLIGENCE_KEY       = local.kv.doc_intelligence_key
+    ENTRA_CLIENT_ID                       = local.kv.entra_client_id
+    ENTRA_CLIENT_SECRET                   = local.kv.entra_client_secret
+    ENTRA_TENANT_ID                       = local.kv.entra_tenant_id
     SMTP_HOST                             = var.smtp_host
     SMTP_PORT                             = tostring(var.smtp_port)
-    SMTP_USERNAME                         = var.smtp_username
-    SMTP_PASSWORD                         = var.smtp_password
+    SMTP_USERNAME                         = local.kv.smtp_username
+    SMTP_PASSWORD                         = local.kv.smtp_password
     APP_URL                               = "https://${local.name_prefix}-frontend.azurewebsites.net"
   }
 }
 
 # ────────────────────────────────────────────────────────────
-# 9. Frontend App Service (Nginx)
+# 6. Frontend App Service (Nginx)
 # ────────────────────────────────────────────────────────────
 
 module "frontend_app_service" {
@@ -162,7 +141,7 @@ module "frontend_app_service" {
 }
 
 # ────────────────────────────────────────────────────────────
-# 10. Application Gateway (path-based routing)
+# 7. Application Gateway (path-based routing)
 # ────────────────────────────────────────────────────────────
 
 module "application_gateway" {
@@ -180,7 +159,36 @@ module "application_gateway" {
 }
 
 # ────────────────────────────────────────────────────────────
-# 11. Azure OpenAI
+# 8. PostgreSQL Flexible Server
+# ────────────────────────────────────────────────────────────
+
+module "postgresql" {
+  source              = "./modules/postgresql"
+  name                = "${local.name_prefix}-pgdb"
+  resource_group_name = module.resource_group.name
+  location            = var.location
+  sku_name            = var.postgres_sku
+  admin_password      = random_password.db_password.result
+  delegated_subnet_id = module.vnet.db_subnet_id
+  private_dns_zone_id = module.vnet.postgres_dns_zone_id
+  tags                = local.common_tags
+}
+
+# ────────────────────────────────────────────────────────────
+# 9. Storage Account (Blob)
+# ────────────────────────────────────────────────────────────
+
+module "storage" {
+  source              = "./modules/storage"
+  name                = "${var.project_name}${var.environment}sa"
+  resource_group_name = module.resource_group.name
+  location            = var.location
+  container_name      = "nutriai-documents"
+  tags                = local.common_tags
+}
+
+# ────────────────────────────────────────────────────────────
+# 10. Azure OpenAI
 # ────────────────────────────────────────────────────────────
 
 module "openai" {
@@ -193,7 +201,7 @@ module "openai" {
 }
 
 # ────────────────────────────────────────────────────────────
-# 12. Service Bus
+# 11. Service Bus
 # ────────────────────────────────────────────────────────────
 
 module "service_bus" {
@@ -206,31 +214,58 @@ module "service_bus" {
   tags                = local.common_tags
 }
 
+
 # ────────────────────────────────────────────────────────────
-# 13. Monitoring (Application Insights + Log Analytics)
+# 13. Key Vault — stores ALL secrets + connection strings
+#     App Services access via Managed Identity (no plain text)
 # ────────────────────────────────────────────────────────────
 
-module "monitoring" {
-  source              = "./modules/monitoring"
-  name                = "${local.name_prefix}-monitor"
+module "key_vault" {
+  source              = "./modules/key_vault"
+  name                = local.kv_name
   resource_group_name = module.resource_group.name
   location            = var.location
   tags                = local.common_tags
+
+  # Grant both App Service managed identities read access
+  app_service_principal_ids = [
+    module.app_service.principal_id,
+    module.frontend_app_service.principal_id,
+  ]
+
+  secrets = {
+    # ── Auth & JWT ───────────────────────────────────────────
+    "jwt-secret-key"     = random_password.jwt_secret.result
+
+    # ── Database ─────────────────────────────────────────────
+    "db-password"        = random_password.db_password.result
+    "database-url"       = module.postgresql.connection_string
+
+    # ── Storage ──────────────────────────────────────────────
+    "storage-connection-string" = module.storage.connection_string
+
+    # ── Azure OpenAI ─────────────────────────────────────────
+    "openai-endpoint"    = module.openai.endpoint
+    "openai-key"         = module.openai.key
+
+    # ── Document Intelligence ────────────────────────────────
+    "doc-intelligence-endpoint" = var.document_intelligence_endpoint
+    "doc-intelligence-key"      = var.document_intelligence_key
+
+    # ── Service Bus ──────────────────────────────────────────
+    "service-bus-connection-string" = module.service_bus.connection_string
+
+    # ── Microsoft Entra ID ───────────────────────────────────
+    "entra-client-id"     = var.entra_client_id
+    "entra-client-secret" = var.entra_client_secret
+    "entra-tenant-id"     = var.entra_tenant_id
+
+    # ── Email (SMTP) ─────────────────────────────────────────
+    "smtp-username"      = var.smtp_username
+    "smtp-password"      = var.smtp_password
+  }
 }
 
-# ────────────────────────────────────────────────────────────
-# 14. Alerts
-# ────────────────────────────────────────────────────────────
-
-module "alerts" {
-  source              = "./modules/alerts"
-  name                = "${local.name_prefix}-alerts"
-  resource_group_name = module.resource_group.name
-  app_service_id      = module.app_service.id
-  appinsights_id      = module.monitoring.appinsights_id
-  action_group_email  = var.admin_email
-  tags                = local.common_tags
-}
 
 # ────────────────────────────────────────────────────────────
 # 15. Entra ID (App Registration)
@@ -243,7 +278,7 @@ module "entra_id" {
 }
 
 # ============================================================
-# Random Passwords
+# Random Passwords (generated by Terraform, stored in Key Vault)
 # ============================================================
 
 resource "random_password" "jwt_secret" {

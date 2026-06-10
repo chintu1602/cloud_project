@@ -1,4 +1,3 @@
-#!/bin/bash
 # ============================================================
 # NutriAI Health Portal - Startup Script
 # Runs Alembic migrations then starts Gunicorn with Uvicorn workers

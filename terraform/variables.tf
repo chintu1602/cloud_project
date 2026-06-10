@@ -26,10 +26,6 @@ variable "location" {
   description = "Azure region for all resources"
 }
 
-variable "admin_email" {
-  type        = string
-  description = "Admin email for alerts and notifications"
-}
 
 # ── Microsoft Entra ID ──────────────────────────────────────
 

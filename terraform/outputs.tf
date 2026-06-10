@@ -43,7 +43,3 @@ output "container_registry_login_server" {
   value = module.container_registry.login_server
 }
 
-output "application_insights_connection_string" {
-  value     = module.monitoring.appinsights_connection_string
-  sensitive = true
-}

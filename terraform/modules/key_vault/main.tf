@@ -1,5 +1,7 @@
 data "azurerm_client_config" "current" {}
 
+# ── Key Vault ────────────────────────────────────────────────
+
 resource "azurerm_key_vault" "this" {
   name                       = var.name
   resource_group_name        = var.resource_group_name
@@ -9,18 +11,41 @@ resource "azurerm_key_vault" "this" {
   purge_protection_enabled   = true
   soft_delete_retention_days = 7
   tags                       = var.tags
-
-  access_policy {
-    tenant_id          = data.azurerm_client_config.current.tenant_id
-    object_id          = data.azurerm_client_config.current.object_id
-    secret_permissions = ["Get", "List", "Set", "Delete", "Purge", "Recover"]
-    key_permissions    = ["Get", "List", "Create", "Delete", "Purge", "Recover"]
-  }
 }
 
+# ── Access Policy: Terraform deployer ────────────────────────
+
+resource "azurerm_key_vault_access_policy" "terraform" {
+  key_vault_id = azurerm_key_vault.this.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = data.azurerm_client_config.current.object_id
+
+  secret_permissions = ["Get", "List", "Set", "Delete", "Purge", "Recover"]
+  key_permissions    = ["Get", "List", "Create", "Delete", "Purge", "Recover"]
+}
+
+# ── Access Policy: App Services (Managed Identity) ───────────
+# Each App Service gets Get + List on secrets only
+
+resource "azurerm_key_vault_access_policy" "app_services" {
+  for_each = toset(var.app_service_principal_ids)
+
+  key_vault_id = azurerm_key_vault.this.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = each.value
+
+  secret_permissions = ["Get", "List"]
+}
+
+# ── Secrets ──────────────────────────────────────────────────
+
 resource "azurerm_key_vault_secret" "secrets" {
-  for_each     = var.secrets
+  for_each = var.secrets
+
   name         = each.key
   value        = each.value
   key_vault_id = azurerm_key_vault.this.id
+
+  # Secrets can only be written after Terraform access policy is in place
+  depends_on = [azurerm_key_vault_access_policy.terraform]
 }
