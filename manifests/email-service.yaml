@@ -1,0 +1,108 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-service
+  namespace: nutriai
+  labels:
+    app: email-service
+    app.kubernetes.io/part-of: nutriai
+spec:
+  replicas: 1  # Single replica — Service Bus consumer should not compete for messages
+  selector:
+    matchLabels:
+      app: email-service
+  template:
+    metadata:
+      labels:
+        app: email-service
+    spec:
+      containers:
+        - name: email-service
+          image: nutriai_acr/email-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8005
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: nutriai-secrets
+                  key: DATABASE_URL
+            - name: AZURE_SERVICE_BUS_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: nutriai-secrets
+                  key: AZURE_SERVICE_BUS_CONNECTION_STRING
+            - name: AZURE_SERVICE_BUS_TOPIC_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: AZURE_SERVICE_BUS_TOPIC_NAME
+            - name: AZURE_SERVICE_BUS_SUBSCRIPTION_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: AZURE_SERVICE_BUS_SUBSCRIPTION_NAME
+            - name: SMTP_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: SMTP_HOST
+            - name: SMTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: SMTP_PORT
+            - name: SMTP_FROM_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: SMTP_FROM_EMAIL
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: nutriai-secrets
+                  key: SMTP_USERNAME
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nutriai-secrets
+                  key: SMTP_PASSWORD
+            - name: APP_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: nutriai-config
+                  key: APP_URL
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: email-service
+  namespace: nutriai
+spec:
+  selector:
+    app: email-service
+  ports:
+    - port: 8005
+      targetPort: 8005
+  type: ClusterIP

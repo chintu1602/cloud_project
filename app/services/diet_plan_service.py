@@ -22,6 +22,7 @@ from app.models.document import Document
 from app.models.diet_plan import DietPlan
 from app.models.user import User, FoodAllergy
 from app.services.openai_service import generate_diet_plan
+from app.services.service_bus_service import publish_meal_reminders
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,8 @@ def create_diet_plan(
         db.add(diet_plan)
         db.commit()
         db.refresh(diet_plan)
+
+        publish_meal_reminders(diet_plan, user.email)
 
         logger.info(f"Diet plan created successfully: {diet_plan.id}")
         return diet_plan

@@ -26,6 +26,7 @@ from app.models.health_log import HealthLog
 from app.models import *
 
 from app.routers import auth, documents, diet_plans, health_tracker, profile, notifications, admin
+from app.services.service_bus_service import service_bus_consumer
 
 # Configure logging
 logging.basicConfig(
@@ -67,6 +68,8 @@ async def startup_event():
     logger.info("Database tables created/verified.")
     asyncio.create_task(periodic_document_cleanup())
     logger.info("Background document cleanup task started.")
+    asyncio.create_task(service_bus_consumer())
+    logger.info("Service Bus meal reminder consumer started.")
 
 
 async def periodic_document_cleanup():

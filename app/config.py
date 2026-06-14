@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     ENTRA_TENANT_ID: str = ""
     ENTRA_REDIRECT_URI: str = "http://localhost:8000/auth/callback"
 
+    # Azure Service Bus
+    AZURE_SERVICE_BUS_CONNECTION_STRING: str = ""
+    AZURE_SERVICE_BUS_TOPIC_NAME: str = "meal-reminders"
+    AZURE_SERVICE_BUS_SUBSCRIPTION_NAME: str = "email-sender"
+
+    # Email (SMTP)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@nutriai-health.com"
+    APP_URL: str = "http://localhost:8000"
+
     # Application Insights
     APPLICATIONINSIGHTS_CONNECTION_STRING: str = ""
 

@@ -1,15 +1,20 @@
-# ============================================================
-# NutriAI Health Portal - Local Development Docker Compose
-# Run all services: docker compose up --build
-# ============================================================
-
 version: "3.9"
 
+# ============================================================
+# NutriAI Health Portal - Local Development Docker Compose
+# Usage:
+#   REGISTRY=nutriai_acr docker compose up --build
+# Default registry is nutriai_acr; override with REGISTRY env var.
+# In production, REGISTRY should be your ACR login server:
+#   e.g. REGISTRY=nutriaiacr.azurecr.io
+# ============================================================
+
 services:
+
   # ============================================================
-  # Infrastructure Services
+  # Infrastructure (local only — use managed Azure services in AKS)
   # ============================================================
-  
+
   postgres:
     image: postgres:16-alpine
     container_name: nutriai-postgres
@@ -45,39 +50,41 @@ services:
       - nutriai-network
 
   # ============================================================
-  # Backend Microservices
+  # Microservices
   # ============================================================
 
-  api-gateway:
+  gateway:
     build:
       context: ./services/api-gateway
       dockerfile: Dockerfile
-    container_name: nutriai-api-gateway
+    image: ${REGISTRY:-nutriai_acr}/gateway:latest
+    container_name: nutriai-gateway
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://nutriai_user:nutriai_password@postgres:5432/nutriai
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-for-development}
-      - AUTH_SERVICE_URL=http://auth-service:8001
-      - DOCUMENT_SERVICE_URL=http://document-service:8002
-      - DIET_SERVICE_URL=http://diet-service:8003
-      - HEALTH_SERVICE_URL=http://health-service:8004
-      - NOTIFICATION_SERVICE_URL=http://notification-service:8005
-      - PROFILE_SERVICE_URL=http://profile-service:8006
+      - AUTH_SERVICE_URL=http://identity-service:8001
+      - DOCUMENT_SERVICE_URL=http://ocr-service:8002
+      - DIET_SERVICE_URL=http://nutrition-service:8003
+      - HEALTH_SERVICE_URL=http://vitals-service:8004
+      - NOTIFICATION_SERVICE_URL=http://email-service:8005
+      - PROFILE_SERVICE_URL=http://patient-service:8006
       - ADMIN_SERVICE_URL=http://admin-service:8007
     depends_on:
       postgres:
         condition: service_healthy
-      auth-service:
+      identity-service:
         condition: service_started
     networks:
       - nutriai-network
 
-  auth-service:
+  identity-service:
     build:
       context: ./services/auth-service
       dockerfile: Dockerfile
-    container_name: nutriai-auth-service
+    image: ${REGISTRY:-nutriai_acr}/identity-service:latest
+    container_name: nutriai-identity-service
     ports:
       - "8001:8001"
     environment:
@@ -95,11 +102,12 @@ services:
     networks:
       - nutriai-network
 
-  document-service:
+  ocr-service:
     build:
       context: ./services/document-service
       dockerfile: Dockerfile
-    container_name: nutriai-document-service
+    image: ${REGISTRY:-nutriai_acr}/ocr-service:latest
+    container_name: nutriai-ocr-service
     ports:
       - "8002:8002"
     environment:
@@ -114,11 +122,12 @@ services:
     networks:
       - nutriai-network
 
-  diet-service:
+  nutrition-service:
     build:
       context: ./services/diet-service
       dockerfile: Dockerfile
-    container_name: nutriai-diet-service
+    image: ${REGISTRY:-nutriai_acr}/nutrition-service:latest
+    container_name: nutriai-nutrition-service
     ports:
       - "8003:8003"
     environment:
@@ -135,11 +144,12 @@ services:
     networks:
       - nutriai-network
 
-  health-service:
+  vitals-service:
     build:
       context: ./services/health-service
       dockerfile: Dockerfile
-    container_name: nutriai-health-service
+    image: ${REGISTRY:-nutriai_acr}/vitals-service:latest
+    container_name: nutriai-vitals-service
     ports:
       - "8004:8004"
     environment:
@@ -150,11 +160,12 @@ services:
     networks:
       - nutriai-network
 
-  notification-service:
+  email-service:
     build:
       context: ./services/notification-service
       dockerfile: Dockerfile
-    container_name: nutriai-notification-service
+    image: ${REGISTRY:-nutriai_acr}/email-service:latest
+    container_name: nutriai-email-service
     ports:
       - "8005:8005"
     environment:
@@ -174,11 +185,12 @@ services:
     networks:
       - nutriai-network
 
-  profile-service:
+  patient-service:
     build:
       context: ./services/profile-service
       dockerfile: Dockerfile
-    container_name: nutriai-profile-service
+    image: ${REGISTRY:-nutriai_acr}/patient-service:latest
+    container_name: nutriai-patient-service
     ports:
       - "8006:8006"
     environment:
@@ -193,6 +205,7 @@ services:
     build:
       context: ./services/admin-service
       dockerfile: Dockerfile
+    image: ${REGISTRY:-nutriai_acr}/admin-service:latest
     container_name: nutriai-admin-service
     ports:
       - "8007:8007"
@@ -212,11 +225,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    image: ${REGISTRY:-nutriai_acr}/frontend:latest
     container_name: nutriai-frontend
     ports:
       - "3000:80"
+    environment:
+      - BACKEND_URL=http://gateway:8000
     depends_on:
-      - api-gateway
+      - gateway
     networks:
       - nutriai-network
 
